@@ -1,6 +1,24 @@
-use rcc::Tokenizer;
+use rcc::{Codegen, Parser, Tokenizer};
+use std::env;
 
 fn main() {
-    let mut tokenizer = Tokenizer::new(include_str!("../tests/ex.c"));
-    dbg!(tokenizer.tokenize());
+    let args: Vec<String> = env::args().collect();
+    if args.len() != 2 {
+        panic!("{}: invalid number of arguments", args[0]);
+    }
+
+    let src = &args[1];
+
+    let mut tokenizer = Tokenizer::new(src);
+
+    let tokens = tokenizer.tokenize();
+
+    let mut parser = Parser::new(src.as_bytes().to_vec(), tokens);
+
+    let nodes = parser.parse();
+
+    let mut codegen = Codegen::new(src.as_bytes().to_vec(), nodes);
+    codegen.program();
+
+    assert!(codegen.depth == 0);
 }

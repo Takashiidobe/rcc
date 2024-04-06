@@ -14,6 +14,7 @@ pub enum ExprKind {
     Sub(P<ExprNode>, P<ExprNode>),
     Mul(P<ExprNode>, P<ExprNode>),
     Div(P<ExprNode>, P<ExprNode>),
+    Neg(P<ExprNode>),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -67,7 +68,7 @@ impl Parser {
     fn add(&mut self) -> ExprNode {
         let mut node = self.mul();
 
-        while let TokenKind::Punct(punct @ Punct::Plus | punct @ Punct::Minus) = self.peek().kind {
+        while let TokenKind::Punct(punct @ (Punct::Plus | Punct::Minus)) = self.peek().kind {
             let loc = self.loc();
             self.advance();
             node = ExprNode {
@@ -85,16 +86,16 @@ impl Parser {
     }
 
     fn mul(&mut self) -> ExprNode {
-        let mut node = self.primary();
+        let mut node = self.unary();
+        let loc = self.loc();
 
-        while let TokenKind::Punct(punct @ Punct::Star | punct @ Punct::Slash) = self.peek().kind {
-            let loc = self.loc();
+        while let TokenKind::Punct(punct @ (Punct::Star | Punct::Slash)) = self.peek().kind {
             self.advance();
             node = ExprNode {
                 kind: if punct == Punct::Star {
-                    ExprKind::Mul(P::new(node), P::new(self.mul()))
+                    ExprKind::Mul(P::new(node), P::new(self.unary()))
                 } else {
-                    ExprKind::Div(P::new(node), P::new(self.mul()))
+                    ExprKind::Div(P::new(node), P::new(self.unary()))
                 },
                 loc,
                 r#type: Type::Int,
@@ -104,6 +105,28 @@ impl Parser {
         node
     }
 
+    // unary = ("+" | "-") unary
+    //       | primary
+    fn unary(&mut self) -> ExprNode {
+        let loc = self.loc();
+
+        if let TokenKind::Punct(punct @ (Punct::Minus | Punct::Plus)) = self.peek().kind {
+            self.advance();
+            if punct == Punct::Plus {
+                return self.unary();
+            }
+
+            return ExprNode {
+                kind: ExprKind::Neg(P::new(self.unary())),
+                loc,
+                r#type: Type::Int,
+            };
+        }
+
+        self.primary()
+    }
+
+    // primary = (number)* | "(" expr ")"
     fn primary(&mut self) -> ExprNode {
         let loc = self.loc();
         match self.peek().kind {

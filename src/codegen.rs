@@ -72,6 +72,10 @@ impl Codegen {
                 println!("  cqo");
                 println!("  idiv %rdi, %rax");
             }
+            ExprKind::Neg(ref rhs) => {
+                self.expr(rhs);
+                println!("  neg %rax");
+            }
         };
     }
 }

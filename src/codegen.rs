@@ -57,7 +57,21 @@ impl Codegen {
                 self.pop("%rdi");
                 println!("  sub %rdi, %rax");
             }
-            _ => {}
+            ExprKind::Mul(ref lhs, ref rhs) => {
+                self.expr(rhs);
+                self.push();
+                self.expr(lhs);
+                self.pop("%rdi");
+                println!("  imul %rdi, %rax");
+            }
+            ExprKind::Div(ref lhs, ref rhs) => {
+                self.expr(rhs);
+                self.push();
+                self.expr(lhs);
+                self.pop("%rdi");
+                println!("  cqo");
+                println!("  idiv %rdi, %rax");
+            }
         };
     }
 }

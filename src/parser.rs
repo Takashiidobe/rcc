@@ -12,6 +12,8 @@ pub enum ExprKind {
     Number(i64),
     Add(P<ExprNode>, P<ExprNode>),
     Sub(P<ExprNode>, P<ExprNode>),
+    Mul(P<ExprNode>, P<ExprNode>),
+    Div(P<ExprNode>, P<ExprNode>),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -59,16 +61,40 @@ impl Parser {
     }
 
     fn expr(&mut self) -> ExprNode {
-        let mut node = self.primary();
+        self.add()
+    }
+
+    fn add(&mut self) -> ExprNode {
+        let mut node = self.mul();
 
         while let TokenKind::Punct(punct @ Punct::Plus | punct @ Punct::Minus) = self.peek().kind {
             let loc = self.loc();
             self.advance();
             node = ExprNode {
                 kind: if punct == Punct::Plus {
-                    ExprKind::Add(P::new(node), P::new(self.primary()))
+                    ExprKind::Add(P::new(node), P::new(self.mul()))
                 } else {
-                    ExprKind::Sub(P::new(node), P::new(self.primary()))
+                    ExprKind::Sub(P::new(node), P::new(self.mul()))
+                },
+                loc,
+                r#type: Type::Int,
+            }
+        }
+
+        node
+    }
+
+    fn mul(&mut self) -> ExprNode {
+        let mut node = self.primary();
+
+        while let TokenKind::Punct(punct @ Punct::Star | punct @ Punct::Slash) = self.peek().kind {
+            let loc = self.loc();
+            self.advance();
+            node = ExprNode {
+                kind: if punct == Punct::Star {
+                    ExprKind::Mul(P::new(node), P::new(self.mul()))
+                } else {
+                    ExprKind::Div(P::new(node), P::new(self.mul()))
                 },
                 loc,
                 r#type: Type::Int,
@@ -88,6 +114,12 @@ impl Parser {
                     loc,
                     r#type: Type::Int,
                 };
+            }
+            TokenKind::Punct(Punct::LeftParen) => {
+                self.advance();
+                let expr = self.expr();
+                self.skip(")");
+                return expr;
             }
             _ => {}
         }
@@ -115,6 +147,10 @@ impl Parser {
             self.error_tok(self.peek(), &format!("Expected {}", s));
         }
         self.advance();
+    }
+
+    fn is_done(&self) -> bool {
+        self.index >= self.tokens.len()
     }
 
     fn ensure_done(&self) {

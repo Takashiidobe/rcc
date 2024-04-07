@@ -76,6 +76,42 @@ impl Codegen {
                 self.expr(rhs);
                 println!("  neg %rax");
             }
+            ExprKind::Eq(ref lhs, ref rhs) => {
+                self.expr(rhs);
+                self.push();
+                self.expr(lhs);
+                self.pop("%rdi");
+                println!("  cmp %rdi, %rax");
+                println!("  sete %al");
+                println!("  movzb %al, %rax");
+            }
+            ExprKind::Ne(ref lhs, ref rhs) => {
+                self.expr(rhs);
+                self.push();
+                self.expr(lhs);
+                self.pop("%rdi");
+                println!("  cmp %rdi, %rax");
+                println!("  setne %al");
+                println!("  movzb %al, %rax");
+            }
+            ExprKind::Lte(ref lhs, ref rhs) => {
+                self.expr(rhs);
+                self.push();
+                self.expr(lhs);
+                self.pop("%rdi");
+                println!("  cmp %rdi, %rax");
+                println!("  setle %al");
+                println!("  movzb %al, %rax");
+            }
+            ExprKind::Lt(ref lhs, ref rhs) => {
+                self.expr(rhs);
+                self.push();
+                self.expr(lhs);
+                self.pop("%rdi");
+                println!("  cmp %rdi, %rax");
+                println!("  setl %al");
+                println!("  movzb %al, %rax");
+            }
         };
     }
 }

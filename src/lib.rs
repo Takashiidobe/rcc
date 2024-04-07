@@ -9,6 +9,7 @@ trait ErrorReporting {
     }
 
     fn error_tok(&self, tok: &Token, msg: &str) -> ! {
+        dbg!(tok);
         self.error_at(tok.loc.offset, msg);
     }
 }

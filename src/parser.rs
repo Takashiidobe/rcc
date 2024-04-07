@@ -14,7 +14,13 @@ pub enum ExprKind {
     Sub(P<ExprNode>, P<ExprNode>),
     Mul(P<ExprNode>, P<ExprNode>),
     Div(P<ExprNode>, P<ExprNode>),
+
     Neg(P<ExprNode>),
+
+    Lt(P<ExprNode>, P<ExprNode>),
+    Lte(P<ExprNode>, P<ExprNode>),
+    Eq(P<ExprNode>, P<ExprNode>),
+    Ne(P<ExprNode>, P<ExprNode>),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -62,9 +68,58 @@ impl Parser {
     }
 
     fn expr(&mut self) -> ExprNode {
-        self.add()
+        self.equality()
     }
 
+    // equality = relational ("==" relational | "!=" relational)*
+    fn equality(&mut self) -> ExprNode {
+        let mut node = self.relational();
+
+        while let TokenKind::Punct(punct @ (Punct::EqEq | Punct::Ne)) = self.peek().kind {
+            let loc = self.loc();
+            self.advance();
+            node = ExprNode {
+                kind: if punct == Punct::EqEq {
+                    ExprKind::Eq(P::new(node), P::new(self.relational()))
+                } else {
+                    ExprKind::Ne(P::new(node), P::new(self.relational()))
+                },
+                loc,
+                r#type: Type::Int,
+            }
+        }
+
+        node
+    }
+
+    // relational = add ("<" add | "<=" add | ">" add | ">=" add)*
+    fn relational(&mut self) -> ExprNode {
+        let mut node = self.add();
+
+        while let TokenKind::Punct(punct @ (Punct::Gt | Punct::Gte | Punct::Lt | Punct::Lte)) =
+            self.peek().kind
+        {
+            let loc = self.loc();
+            self.advance();
+            node = ExprNode {
+                kind: if punct == Punct::Gt {
+                    ExprKind::Lt(P::new(self.add()), P::new(node))
+                } else if punct == Punct::Gte {
+                    ExprKind::Lte(P::new(self.add()), P::new(node))
+                } else if punct == Punct::Lt {
+                    ExprKind::Lt(P::new(node), P::new(self.add()))
+                } else {
+                    ExprKind::Lte(P::new(node), P::new(self.add()))
+                },
+                loc,
+                r#type: Type::Int,
+            }
+        }
+
+        node
+    }
+
+    // add = mul ("+" mul | "-" mul)*
     fn add(&mut self) -> ExprNode {
         let mut node = self.mul();
 
@@ -85,6 +140,7 @@ impl Parser {
         node
     }
 
+    // mul = unary ("*" unary | "/" unary)*
     fn mul(&mut self) -> ExprNode {
         let mut node = self.unary();
         let loc = self.loc();

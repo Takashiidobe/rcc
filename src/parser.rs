@@ -93,6 +93,7 @@ impl Parser {
     }
 
     // stmt = "return" expr ";
+    //      | "if" "(" expr ")" stmt ("else" stmt)?
     //      | "{" compound-stmt
     //      | expr-stmt
     fn stmt(&mut self) -> StmtNode {
@@ -104,6 +105,24 @@ impl Parser {
                 kind: StmtKind::Return(node.clone()),
                 loc: node.loc,
                 r#type: node.r#type,
+            };
+        }
+        if let TokenKind::Keyword(Keyword::If) = self.peek().kind {
+            let loc = self.loc();
+            self.advance();
+            self.skip("(");
+            let cond = P::new(self.expr());
+            self.skip(")");
+            let then = P::new(self.stmt());
+            let mut r#else = None;
+            if let TokenKind::Keyword(Keyword::Else) = self.peek().kind {
+                self.advance();
+                r#else = Some(P::new(self.stmt()));
+            }
+            return StmtNode {
+                kind: StmtKind::If(cond, then, r#else),
+                loc,
+                r#type: Type::Int,
             };
         }
         if let TokenKind::Punct(Punct::LeftBrace) = self.peek().kind {

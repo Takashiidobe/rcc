@@ -5,6 +5,7 @@ pub struct Codegen {
     pub node: StmtNode,
     pub depth: i64,
     pub stack_size: usize,
+    pub if_count: usize,
 }
 
 impl ErrorReporting for Codegen {
@@ -18,8 +19,9 @@ impl Codegen {
         Self {
             source,
             node,
-            depth: 0,
             stack_size,
+            if_count: 0,
+            depth: 0,
         }
     }
 
@@ -67,8 +69,26 @@ impl Codegen {
                     self.stmt(stmt);
                 }
             }
+            StmtKind::If(cond, then, r#else) => {
+                let c = self.if_count();
+                self.expr(cond);
+                println!("  cmp $0, %rax");
+                println!("  je  .L.else.{}", c);
+                self.stmt(then);
+                println!("  jmp .L.end.{}", c);
+                println!(".L.else.{}:", c);
+                if let Some(else_branch) = r#else {
+                    self.stmt(else_branch);
+                }
+                println!(".L.end.{}:", c);
+            }
             _ => panic!("invalid statement"),
         }
+    }
+
+    fn if_count(&mut self) -> usize {
+        self.if_count += 1;
+        self.if_count
     }
 
     fn expr(&mut self, node: &ExprNode) {

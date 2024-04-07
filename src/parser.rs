@@ -61,12 +61,33 @@ impl Parser {
         }
     }
 
-    pub fn parse(&mut self) -> Vec<ExprNode> {
-        let res = vec![self.expr()];
+    // parse = stmt*
+    pub fn parse(&mut self) -> Vec<StmtNode> {
+        let mut res = vec![];
+        while !self.is_done() {
+            res.push(self.stmt());
+        }
         self.ensure_done();
         res
     }
 
+    // stmt = expr-stmt
+    fn stmt(&mut self) -> StmtNode {
+        self.expr_stmt()
+    }
+
+    // expr-stmt = expr ";"
+    fn expr_stmt(&mut self) -> StmtNode {
+        let node = self.expr();
+        self.skip(";");
+        StmtNode {
+            kind: StmtKind::Expr(node.clone()),
+            loc: node.loc,
+            r#type: node.r#type,
+        }
+    }
+
+    // expr = equality
     fn expr(&mut self) -> ExprNode {
         self.equality()
     }
@@ -229,7 +250,7 @@ impl Parser {
     }
 
     fn is_done(&self) -> bool {
-        self.index >= self.tokens.len()
+        self.index >= self.tokens.len() || self.tokens[self.index].kind == TokenKind::Eof
     }
 
     fn ensure_done(&self) {

@@ -1,8 +1,8 @@
-use crate::{ErrorReporting, ExprKind, ExprNode};
+use crate::{ErrorReporting, ExprKind, ExprNode, StmtNode};
 
 pub struct Codegen {
     pub source: Vec<u8>,
-    pub nodes: Vec<ExprNode>,
+    pub nodes: Vec<StmtNode>,
     pub depth: i64,
 }
 
@@ -13,7 +13,7 @@ impl ErrorReporting for Codegen {
 }
 
 impl Codegen {
-    pub fn new(source: Vec<u8>, nodes: Vec<ExprNode>) -> Self {
+    pub fn new(source: Vec<u8>, nodes: Vec<StmtNode>) -> Self {
         Self {
             source,
             nodes,
@@ -25,7 +25,7 @@ impl Codegen {
         println!("  .globl main");
         println!("main:");
         for node in self.nodes.clone() {
-            self.expr(&node);
+            self.stmt(&node);
         }
         println!("  ret");
     }
@@ -38,6 +38,13 @@ impl Codegen {
     fn pop(&mut self, arg: &str) {
         println!("  pop {}", arg);
         self.depth -= 1;
+    }
+
+    fn stmt(&mut self, node: &StmtNode) {
+        match &node.kind {
+            crate::StmtKind::Expr(lhs) => self.expr(lhs),
+            _ => panic!("invalid statement"),
+        }
     }
 
     fn expr(&mut self, node: &ExprNode) {

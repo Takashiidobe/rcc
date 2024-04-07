@@ -1,0 +1,45 @@
+---
+source: src/tokenizer.rs
+expression: tokenizer.tokenize()
+---
+- kind:
+    Type: Int
+  loc:
+    offset: 23
+    line: 2
+    column: 1
+  length: 3
+- kind:
+    Var: x
+  loc:
+    offset: 27
+    line: 2
+    column: 1
+  length: 1
+- kind:
+    Punct: Eq
+  loc:
+    offset: 29
+    line: 2
+    column: 1
+  length: 1
+- kind:
+    Number: 10
+  loc:
+    offset: 31
+    line: 2
+    column: 1
+  length: 2
+- kind:
+    Punct: Semicolon
+  loc:
+    offset: 33
+    line: 2
+    column: 1
+  length: 1
+- kind: Eof
+  loc:
+    offset: 47
+    line: 3
+    column: 1
+  length: 0

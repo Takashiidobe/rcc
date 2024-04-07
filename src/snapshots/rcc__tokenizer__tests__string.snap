@@ -1,0 +1,17 @@
+---
+source: src/tokenizer.rs
+expression: tokenizer.tokenize()
+---
+- kind:
+    Str: Hello world
+  loc:
+    offset: 0
+    line: 1
+    column: 1
+  length: 11
+- kind: Eof
+  loc:
+    offset: 13
+    line: 1
+    column: 1
+  length: 0

@@ -61,6 +61,8 @@ pub struct Parser {
     pub source: Vec<u8>,
     pub tokens: Vec<Token>,
     pub index: usize,
+    pub stack_offset: i64,
+    pub stack_size: usize,
 }
 
 impl ErrorReporting for Parser {
@@ -75,17 +77,19 @@ impl Parser {
             source,
             tokens,
             index: 0,
+            stack_offset: 0,
+            stack_size: 0,
         }
     }
 
     // parse = stmt*
-    pub fn parse(&mut self) -> Vec<StmtNode> {
+    pub fn parse(&mut self) -> (Vec<StmtNode>, usize) {
         let mut res = vec![];
         while !self.is_done() {
             res.push(self.stmt());
         }
         self.ensure_done();
-        res
+        (res, self.stack_size)
     }
 
     // stmt = expr-stmt
@@ -255,7 +259,9 @@ impl Parser {
                 self.advance();
                 return ExprNode {
                     kind: ExprKind::Var(Binding {
-                        kind: BindingKind::LocalVar { stack_offset: -1 },
+                        kind: BindingKind::LocalVar {
+                            stack_offset: self.stack_offset(),
+                        },
                         name: val.bytes().collect(),
                         r#type: Type::Int,
                         loc,
@@ -307,6 +313,16 @@ impl Parser {
             TokenKind::Eof => {}
             _ => self.error_tok(self.peek(), "extra token"),
         }
+    }
+
+    fn stack_offset(&mut self) -> i64 {
+        self.stack_offset += 8;
+        self.align_stack(16);
+        -self.stack_offset
+    }
+
+    fn align_stack(&mut self, align: usize) {
+        self.stack_size = (self.stack_size + align - 1) / align * align;
     }
 
     fn loc(&self) -> SourceLocation {

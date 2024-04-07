@@ -1,9 +1,10 @@
-use crate::{Binding, BindingKind, ErrorReporting, ExprKind, ExprNode, StmtKind, StmtNode};
+use crate::{Binding, BindingKind, ErrorReporting, ExprKind, ExprNode, StmtNode};
 
 pub struct Codegen {
     pub source: Vec<u8>,
     pub nodes: Vec<StmtNode>,
     pub depth: i64,
+    pub stack_size: usize,
 }
 
 impl ErrorReporting for Codegen {
@@ -13,11 +14,12 @@ impl ErrorReporting for Codegen {
 }
 
 impl Codegen {
-    pub fn new(source: Vec<u8>, nodes: Vec<StmtNode>) -> Self {
+    pub fn new(source: Vec<u8>, nodes: Vec<StmtNode>, stack_size: usize) -> Self {
         Self {
             source,
             nodes,
             depth: 0,
+            stack_size,
         }
     }
 

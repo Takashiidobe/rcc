@@ -1,5 +1,8 @@
 use crate::ErrorReporting;
+#[cfg(test)]
+use serde::{Deserialize, Serialize};
 
+#[cfg_attr(test, derive(Serialize, Deserialize))]
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Keyword {
     Asm,
@@ -22,6 +25,8 @@ pub enum Keyword {
     Union,
     While,
 }
+
+#[cfg_attr(test, derive(Serialize, Deserialize))]
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Macro {
     Define,
@@ -33,6 +38,7 @@ pub enum Macro {
     Undef,
 }
 
+#[cfg_attr(test, derive(Serialize, Deserialize))]
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Lifetime {
     Auto,
@@ -42,6 +48,7 @@ pub enum Lifetime {
     Volatile,
 }
 
+#[cfg_attr(test, derive(Serialize, Deserialize))]
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Type {
     Char,
@@ -53,6 +60,7 @@ pub enum Type {
     Void,
 }
 
+#[cfg_attr(test, derive(Serialize, Deserialize))]
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Punct {
     Ampersand,
@@ -82,6 +90,7 @@ pub enum Punct {
     Star,
 }
 
+#[cfg_attr(test, derive(Serialize, Deserialize))]
 #[derive(Debug, Clone, PartialEq)]
 pub enum TokenKind {
     Keyword(Keyword),
@@ -96,6 +105,7 @@ pub enum TokenKind {
     Eof,
 }
 
+#[cfg_attr(test, derive(Serialize, Deserialize))]
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct SourceLocation {
     pub offset: usize,
@@ -103,6 +113,7 @@ pub struct SourceLocation {
     pub column: usize,
 }
 
+#[cfg_attr(test, derive(Serialize, Deserialize))]
 #[derive(Debug, Clone, PartialEq)]
 pub struct Token {
     pub kind: TokenKind,
@@ -479,8 +490,14 @@ impl Tokenizer {
 
         // handle identifiers
         let mut ident = vec![];
-        while let Some(c) = self.peek() {
+        if let Some(c) = self.peek() {
             if c.is_ascii_alphabetic() || c == b'_' {
+                ident.push(c);
+                self.advance();
+            }
+        }
+        while let Some(c) = self.peek() {
+            if c.is_ascii_alphanumeric() {
                 ident.push(c);
                 self.advance();
             } else {
@@ -792,103 +809,36 @@ macro_rules! kw {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::Keyword::*;
-    use crate::Punct::*;
-    use crate::Type::*;
-    use TokenKind::*;
+    use insta::assert_yaml_snapshot;
 
     #[test]
     fn nothing() {
         let mut tokenizer = Tokenizer::new("");
-        assert_eq!(tokenizer.tokenize(), []);
+        assert_yaml_snapshot!(tokenizer.tokenize());
     }
 
     #[test]
     fn ten() {
         let mut tokenizer = Tokenizer::new("10");
-        assert_eq!(
-            tokenizer.tokenize(),
-            [Token {
-                kind: Number(10),
-                loc: SourceLocation {
-                    offset: 0,
-                    line: 1,
-                    column: 1
-                },
-                length: 2
-            }]
-        );
+        assert_yaml_snapshot!(tokenizer.tokenize());
     }
 
     #[test]
     fn multiple() {
         let mut tokenizer = Tokenizer::new("10 20 30");
-        assert_eq!(
-            tokenizer.tokenize(),
-            [
-                Token {
-                    kind: Number(10),
-                    loc: SourceLocation {
-                        offset: 0,
-                        line: 1,
-                        column: 1
-                    },
-                    length: 2
-                },
-                Token {
-                    kind: Number(20),
-                    loc: SourceLocation {
-                        offset: 3,
-                        line: 1,
-                        column: 1
-                    },
-                    length: 2
-                },
-                Token {
-                    kind: Number(30),
-                    loc: SourceLocation {
-                        offset: 6,
-                        line: 1,
-                        column: 1
-                    },
-                    length: 2
-                }
-            ]
-        )
+        assert_yaml_snapshot!(tokenizer.tokenize());
     }
 
     #[test]
     fn string() {
         let mut tokenizer = Tokenizer::new("\"Hello world\"");
-        assert_eq!(
-            tokenizer.tokenize(),
-            [Token {
-                kind: Str("Hello world".to_string()),
-                loc: SourceLocation {
-                    offset: 0,
-                    line: 1,
-                    column: 1
-                },
-                length: 11
-            }]
-        )
+        assert_yaml_snapshot!(tokenizer.tokenize());
     }
 
     #[test]
     fn with_any_char() {
         let mut tokenizer = Tokenizer::new("\"+-xd\"");
-        assert_eq!(
-            tokenizer.tokenize(),
-            [Token {
-                kind: Str("+-xd".to_string()),
-                loc: SourceLocation {
-                    offset: 0,
-                    line: 1,
-                    column: 1
-                },
-                length: 4
-            }]
-        )
+        assert_yaml_snapshot!(tokenizer.tokenize());
     }
     #[test]
     fn multiline_comments() {
@@ -897,164 +847,12 @@ mod tests {
             int x = 10;
             "#,
         );
-        assert_eq!(
-            tokenizer.tokenize(),
-            [
-                Token {
-                    kind: Type(Int),
-                    loc: SourceLocation {
-                        offset: 23,
-                        line: 2,
-                        column: 1
-                    },
-                    length: 3
-                },
-                Token {
-                    kind: Var("x".to_string()),
-                    loc: SourceLocation {
-                        offset: 27,
-                        line: 2,
-                        column: 1
-                    },
-                    length: 1
-                },
-                Token {
-                    kind: Punct(Eq),
-                    loc: SourceLocation {
-                        offset: 29,
-                        line: 2,
-                        column: 1
-                    },
-                    length: 1
-                },
-                Token {
-                    kind: Number(10),
-                    loc: SourceLocation {
-                        offset: 31,
-                        line: 2,
-                        column: 1
-                    },
-                    length: 2
-                },
-                Token {
-                    kind: Punct(Semicolon),
-                    loc: SourceLocation {
-                        offset: 33,
-                        line: 2,
-                        column: 1
-                    },
-                    length: 1
-                }
-            ]
-        );
+        assert_yaml_snapshot!(tokenizer.tokenize());
     }
 
     #[test]
     fn main_func_looking() {
         let mut tokenizer = Tokenizer::new("int main() { return 1 + 1; }");
-        assert_eq!(
-            tokenizer.tokenize(),
-            [
-                Token {
-                    kind: Type(Int),
-                    loc: SourceLocation {
-                        offset: 0,
-                        line: 1,
-                        column: 1
-                    },
-                    length: 3
-                },
-                Token {
-                    kind: Var("main".to_string()),
-                    loc: SourceLocation {
-                        offset: 4,
-                        line: 1,
-                        column: 1
-                    },
-                    length: 4
-                },
-                Token {
-                    kind: Punct(LeftParen),
-                    loc: SourceLocation {
-                        offset: 8,
-                        line: 1,
-                        column: 1
-                    },
-                    length: 1
-                },
-                Token {
-                    kind: Punct(RightParen),
-                    loc: SourceLocation {
-                        offset: 9,
-                        line: 1,
-                        column: 1
-                    },
-                    length: 1
-                },
-                Token {
-                    kind: Punct(LeftBrace),
-                    loc: SourceLocation {
-                        offset: 11,
-                        line: 1,
-                        column: 1
-                    },
-                    length: 1
-                },
-                Token {
-                    kind: Keyword(Return),
-                    loc: SourceLocation {
-                        offset: 13,
-                        line: 1,
-                        column: 1
-                    },
-                    length: 6
-                },
-                Token {
-                    kind: Number(1),
-                    loc: SourceLocation {
-                        offset: 20,
-                        line: 1,
-                        column: 1
-                    },
-                    length: 1
-                },
-                Token {
-                    kind: Punct(Plus),
-                    loc: SourceLocation {
-                        offset: 22,
-                        line: 1,
-                        column: 1
-                    },
-                    length: 1
-                },
-                Token {
-                    kind: Number(1),
-                    loc: SourceLocation {
-                        offset: 24,
-                        line: 1,
-                        column: 1
-                    },
-                    length: 1
-                },
-                Token {
-                    kind: Punct(Semicolon),
-                    loc: SourceLocation {
-                        offset: 25,
-                        line: 1,
-                        column: 1
-                    },
-                    length: 1
-                },
-                Token {
-                    kind: Punct(RightBrace),
-                    loc: SourceLocation {
-                        offset: 27,
-                        line: 1,
-                        column: 1
-                    },
-                    length: 1
-                }
-            ]
-        )
+        assert_yaml_snapshot!(tokenizer.tokenize());
     }
 }

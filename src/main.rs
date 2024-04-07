@@ -15,9 +15,9 @@ fn main() {
 
     let mut parser = Parser::new(src.as_bytes().to_vec(), tokens);
 
-    let nodes = parser.parse();
+    let (nodes, stack_size) = parser.parse();
 
-    let mut codegen = Codegen::new(src.as_bytes().to_vec(), nodes);
+    let mut codegen = Codegen::new(src.as_bytes().to_vec(), nodes, stack_size);
     codegen.program();
 
     assert!(codegen.depth == 0);

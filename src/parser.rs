@@ -85,16 +85,15 @@ impl Parser {
     }
 
     // parse = stmt*
-    pub fn parse(&mut self) -> (Vec<StmtNode>, usize) {
-        let mut res = vec![];
-        while !self.is_done() {
-            res.push(self.stmt());
-        }
+    pub fn parse(&mut self) -> (StmtNode, usize) {
+        self.skip("{");
+        let res = self.compound_stmt();
         self.ensure_done();
         (res, self.stack_size)
     }
 
     // stmt = "return" expr ";
+    //      | "{" compound-stmt
     //      | expr-stmt
     fn stmt(&mut self) -> StmtNode {
         if let TokenKind::Keyword(Keyword::Return) = self.peek().kind {
@@ -107,7 +106,26 @@ impl Parser {
                 r#type: node.r#type,
             };
         }
+        if let TokenKind::Punct(Punct::LeftBrace) = self.peek().kind {
+            self.advance();
+            return self.compound_stmt();
+        }
         self.expr_stmt()
+    }
+
+    // compound-stmt = stmt* "}"
+    fn compound_stmt(&mut self) -> StmtNode {
+        let mut stmts = vec![];
+        let loc = self.loc();
+        while self.peek().kind != TokenKind::Punct(Punct::RightBrace) {
+            stmts.push(self.stmt());
+        }
+        self.skip("}");
+        StmtNode {
+            kind: StmtKind::Block(stmts),
+            loc,
+            r#type: Type::Int,
+        }
     }
 
     // expr-stmt = expr ";"

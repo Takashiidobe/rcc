@@ -1,4 +1,6 @@
-use crate::{ErrorReporting, Punct, SourceLocation, Token, TokenKind, Type, P};
+use std::collections::HashMap;
+
+use crate::{ErrorReporting, Keyword, Punct, SourceLocation, Token, TokenKind, Type, P};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Node<Kind> {
@@ -57,9 +59,11 @@ pub enum StmtKind {
 pub type ExprNode = Node<ExprKind>;
 pub type StmtNode = Node<StmtKind>;
 
+#[derive(Default)]
 pub struct Parser {
     pub source: Vec<u8>,
     pub tokens: Vec<Token>,
+    pub variables: HashMap<String, i64>,
     pub index: usize,
     pub stack_offset: i64,
     pub stack_size: usize,
@@ -76,9 +80,7 @@ impl Parser {
         Self {
             source,
             tokens,
-            index: 0,
-            stack_offset: 0,
-            stack_size: 0,
+            ..Default::default()
         }
     }
 
@@ -92,8 +94,19 @@ impl Parser {
         (res, self.stack_size)
     }
 
-    // stmt = expr-stmt
+    // stmt = "return" expr ";
+    //      | expr-stmt
     fn stmt(&mut self) -> StmtNode {
+        if let TokenKind::Keyword(Keyword::Return) = self.peek().kind {
+            self.advance();
+            let node = self.expr();
+            self.skip(";");
+            return StmtNode {
+                kind: StmtKind::Return(node.clone()),
+                loc: node.loc,
+                r#type: node.r#type,
+            };
+        }
         self.expr_stmt()
     }
 
@@ -116,7 +129,7 @@ impl Parser {
     // assign = equality ("=" assign)?
     fn assign(&mut self) -> ExprNode {
         let mut node = self.equality();
-        if self.peek().kind == TokenKind::Punct(Punct::Eq) {
+        if let TokenKind::Punct(Punct::Eq) = self.peek().kind {
             let loc = self.loc();
 
             // left hand side must be a var
@@ -257,11 +270,16 @@ impl Parser {
             }
             TokenKind::Var(val) => {
                 self.advance();
+                let stack_offset = if self.variables.contains_key(&val) {
+                    *self.variables.get(&val).unwrap()
+                } else {
+                    let stack_offset = self.stack_offset();
+                    self.variables.insert(val.clone(), stack_offset);
+                    stack_offset
+                };
                 return ExprNode {
                     kind: ExprKind::Var(Binding {
-                        kind: BindingKind::LocalVar {
-                            stack_offset: self.stack_offset(),
-                        },
+                        kind: BindingKind::LocalVar { stack_offset },
                         name: val.bytes().collect(),
                         r#type: Type::Int,
                         loc,
@@ -317,12 +335,13 @@ impl Parser {
 
     fn stack_offset(&mut self) -> i64 {
         self.stack_offset += 8;
+        self.stack_size += 8;
         self.align_stack(16);
         -self.stack_offset
     }
 
     fn align_stack(&mut self, align: usize) {
-        self.stack_size = (self.stack_size + align - 1) / align * align;
+        self.stack_size = (self.stack_offset as usize + align - 1) / align * align;
     }
 
     fn loc(&self) -> SourceLocation {

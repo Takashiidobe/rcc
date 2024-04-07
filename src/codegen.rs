@@ -1,4 +1,4 @@
-use crate::{Binding, BindingKind, ErrorReporting, ExprKind, ExprNode, StmtNode};
+use crate::{Binding, BindingKind, ErrorReporting, ExprKind, ExprNode, StmtKind, StmtNode};
 
 pub struct Codegen {
     pub source: Vec<u8>,
@@ -26,9 +26,15 @@ impl Codegen {
     pub fn program(&mut self) {
         println!("  .globl main");
         println!("main:");
+        println!("  push %rbp");
+        println!("  mov %rsp, %rbp");
+        println!("  sub ${}, %rsp", self.stack_size);
         for node in self.nodes.clone() {
             self.stmt(&node);
         }
+        println!(".L.return:");
+        println!("  mov %rbp, %rsp");
+        println!("  pop %rbp");
         println!("  ret");
     }
 
@@ -44,9 +50,8 @@ impl Codegen {
 
     fn addr(&self, node: &Binding) {
         match &node.kind {
-            BindingKind::LocalVar { .. } => {
-                let offset = ((node.name[0] - b'a' + 1) * 8) as i64;
-                println!("  lea {}(%rbp), %rax", -offset);
+            BindingKind::LocalVar { stack_offset } => {
+                println!("  lea {}(%rbp), %rax", stack_offset);
             }
             _ => self.error_at(node.loc.offset, "not an lvalue"),
         }
@@ -54,7 +59,11 @@ impl Codegen {
 
     fn stmt(&mut self, node: &StmtNode) {
         match &node.kind {
-            crate::StmtKind::Expr(lhs) => self.expr(lhs),
+            StmtKind::Expr(lhs) => self.expr(lhs),
+            StmtKind::Return(lhs) => {
+                self.expr(lhs);
+                println!("  jmp .L.return");
+            }
             _ => panic!("invalid statement"),
         }
     }

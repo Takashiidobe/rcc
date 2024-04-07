@@ -1,4 +1,4 @@
-use crate::{ErrorReporting, ExprKind, ExprNode, StmtNode};
+use crate::{Binding, BindingKind, ErrorReporting, ExprKind, ExprNode, StmtKind, StmtNode};
 
 pub struct Codegen {
     pub source: Vec<u8>,
@@ -38,6 +38,16 @@ impl Codegen {
     fn pop(&mut self, arg: &str) {
         println!("  pop {}", arg);
         self.depth -= 1;
+    }
+
+    fn addr(&self, node: &Binding) {
+        match &node.kind {
+            BindingKind::LocalVar { .. } => {
+                let offset = ((node.name[0] - b'a' + 1) * 8) as i64;
+                println!("  lea {}(%rbp), %rax", -offset);
+            }
+            _ => self.error_at(node.loc.offset, "not an lvalue"),
+        }
     }
 
     fn stmt(&mut self, node: &StmtNode) {
@@ -118,6 +128,17 @@ impl Codegen {
                 println!("  cmp %rdi, %rax");
                 println!("  setl %al");
                 println!("  movzb %al, %rax");
+            }
+            ExprKind::Var(ref node) => {
+                self.addr(node);
+                println!("  mov (%rax), %rax");
+            }
+            ExprKind::Assign(ref lhs, ref rhs) => {
+                self.addr(lhs);
+                self.push();
+                self.expr(rhs);
+                self.pop("%rdi");
+                println!("  mov %rax, (%rdi)");
             }
         };
     }

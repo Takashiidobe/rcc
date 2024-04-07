@@ -8,6 +8,20 @@ pub struct Node<Kind> {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub enum BindingKind {
+    GlobalVar { init_data: Option<Vec<u8>> },
+    LocalVar { stack_offset: i64 },
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Binding {
+    pub kind: BindingKind,
+    pub name: Vec<u8>,
+    pub r#type: Type,
+    pub loc: SourceLocation,
+}
+
+#[derive(Debug, Clone)]
 pub enum ExprKind {
     Number(i64),
     Add(P<ExprNode>, P<ExprNode>),
@@ -21,9 +35,12 @@ pub enum ExprKind {
     Lte(P<ExprNode>, P<ExprNode>),
     Eq(P<ExprNode>, P<ExprNode>),
     Ne(P<ExprNode>, P<ExprNode>),
+
+    Assign(Binding, P<ExprNode>),
+    Var(Binding),
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub enum StmtKind {
     Expr(ExprNode),
     Return(ExprNode),
@@ -89,7 +106,26 @@ impl Parser {
 
     // expr = equality
     fn expr(&mut self) -> ExprNode {
-        self.equality()
+        self.assign()
+    }
+
+    // assign = equality ("=" assign)?
+    fn assign(&mut self) -> ExprNode {
+        let mut node = self.equality();
+        if self.peek().kind == TokenKind::Punct(Punct::Eq) {
+            let loc = self.loc();
+
+            // left hand side must be a var
+            if let ExprKind::Var(name) = node.kind {
+                self.advance();
+                node = ExprNode {
+                    kind: ExprKind::Assign(name, P::new(self.assign())),
+                    loc,
+                    r#type: Type::Int,
+                };
+            }
+        }
+        node
     }
 
     // equality = relational ("==" relational | "!=" relational)*
@@ -203,14 +239,27 @@ impl Parser {
         self.primary()
     }
 
-    // primary = (number)* | "(" expr ")"
+    // primary = "(" expr ")" | ident | num
     fn primary(&mut self) -> ExprNode {
         let loc = self.loc();
-        match self.peek().kind {
+        match self.peek().kind.clone() {
             TokenKind::Number(val) => {
                 self.advance();
                 return ExprNode {
                     kind: ExprKind::Number(val),
+                    loc,
+                    r#type: Type::Int,
+                };
+            }
+            TokenKind::Var(val) => {
+                self.advance();
+                return ExprNode {
+                    kind: ExprKind::Var(Binding {
+                        kind: BindingKind::LocalVar { stack_offset: -1 },
+                        name: val.bytes().collect(),
+                        r#type: Type::Int,
+                        loc,
+                    }),
                     loc,
                     r#type: Type::Int,
                 };

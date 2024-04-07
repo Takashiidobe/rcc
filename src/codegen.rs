@@ -5,7 +5,7 @@ pub struct Codegen {
     pub node: StmtNode,
     pub depth: i64,
     pub stack_size: usize,
-    pub if_count: usize,
+    pub count: usize,
 }
 
 impl ErrorReporting for Codegen {
@@ -20,7 +20,7 @@ impl Codegen {
             source,
             node,
             stack_size,
-            if_count: 0,
+            count: 0,
             depth: 0,
         }
     }
@@ -70,7 +70,7 @@ impl Codegen {
                 }
             }
             StmtKind::If(cond, then, r#else) => {
-                let c = self.if_count();
+                let c = self.count();
                 self.expr(cond);
                 println!("  cmp $0, %rax");
                 println!("  je  .L.else.{}", c);
@@ -82,13 +82,30 @@ impl Codegen {
                 }
                 println!(".L.end.{}:", c);
             }
-            _ => panic!("invalid statement"),
+            StmtKind::For(init, cond, incr, then) => {
+                let c = self.count();
+                if let Some(init) = init {
+                    self.stmt(init);
+                }
+                println!(".L.begin.{}:", c);
+                if let Some(cond) = cond {
+                    self.expr(cond);
+                    println!("  cmp $0, %rax");
+                    println!("  je  .L.end.{}", c);
+                }
+                self.stmt(then);
+                if let Some(incr) = incr {
+                    self.expr(incr);
+                }
+                println!("  jmp .L.begin.{}", c);
+                println!(".L.end.{}:", c);
+            }
         }
     }
 
-    fn if_count(&mut self) -> usize {
-        self.if_count += 1;
-        self.if_count
+    fn count(&mut self) -> usize {
+        self.count += 1;
+        self.count
     }
 
     fn expr(&mut self, node: &ExprNode) {

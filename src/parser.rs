@@ -128,8 +128,18 @@ impl Parser {
         }
     }
 
-    // expr-stmt = expr ";"
+    // expr-stmt = expr? ";"
     fn expr_stmt(&mut self) -> StmtNode {
+        let loc = self.loc();
+        if let TokenKind::Punct(Punct::Semicolon) = self.peek().kind {
+            self.advance();
+            return StmtNode {
+                kind: StmtKind::Block(vec![]),
+                loc,
+                r#type: Type::Int,
+            };
+        }
+
         let node = self.expr();
         self.skip(";");
         StmtNode {

@@ -50,6 +50,8 @@ pub enum ExprKind {
 
     Addr(P<ExprNode>),
     Deref(P<ExprNode>),
+
+    Funcall(Vec<u8>),
 }
 
 #[derive(Debug, Clone)]
@@ -448,7 +450,8 @@ impl Parser {
         self.primary()
     }
 
-    // primary = "(" expr ")" | ident | num
+    // primary = "(" expr ")" | ident args? | num
+    // args = "(" ")"
     fn primary(&mut self) -> ExprNode {
         let loc = self.loc();
         match self.peek().kind.clone() {
@@ -462,6 +465,19 @@ impl Parser {
             }
             TokenKind::Var(val) => {
                 self.advance();
+
+                // handle function call
+                if self.r#match("(") {
+                    self.advance();
+                    let node = ExprNode {
+                        kind: ExprKind::Funcall(val.into()),
+                        loc,
+                        r#type: Type::Int,
+                    };
+                    self.skip(")");
+                    return node;
+                }
+
                 let stack_offset = if self.variables.contains_key(&val) {
                     *self.variables.get(&val).unwrap()
                 } else {
@@ -480,6 +496,7 @@ impl Parser {
                     r#type: Type::Int,
                 };
             }
+
             TokenKind::Punct(Punct::LeftParen) => {
                 self.advance();
                 let expr = self.expr();

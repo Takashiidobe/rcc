@@ -205,6 +205,10 @@ impl Codegen {
                 self.expr(lhs);
                 println!("  mov (%rax), %rax");
             }
+            ExprKind::Funcall(ref name) => {
+                println!("  mov $0, %rax");
+                println!("  call {}", String::from_utf8_lossy(name));
+            }
         };
     }
 }

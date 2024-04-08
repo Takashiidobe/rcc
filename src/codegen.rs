@@ -1,5 +1,7 @@
 use crate::{Binding, BindingKind, ErrorReporting, ExprKind, ExprNode, StmtKind, StmtNode};
 
+const ARG_REGS: [&str; 6] = ["%rdi", "%rsi", "%rdx", "%rcx", "%r8", "%r9"];
+
 pub struct Codegen {
     pub source: Vec<u8>,
     pub nodes: Vec<StmtNode>,
@@ -205,7 +207,15 @@ impl Codegen {
                 self.expr(lhs);
                 println!("  mov (%rax), %rax");
             }
-            ExprKind::Funcall(ref name) => {
+            ExprKind::Funcall(ref name, ref args) => {
+                for arg in args {
+                    self.expr(arg);
+                    self.push();
+                }
+                for i in (0..args.len()).rev() {
+                    self.pop(ARG_REGS[i]);
+                }
+
                 println!("  mov $0, %rax");
                 println!("  call {}", String::from_utf8_lossy(name));
             }

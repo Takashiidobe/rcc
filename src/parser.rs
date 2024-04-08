@@ -51,7 +51,7 @@ pub enum ExprKind {
     Addr(P<ExprNode>),
     Deref(P<ExprNode>),
 
-    Funcall(Vec<u8>),
+    Funcall(Vec<u8>, Vec<ExprNode>),
 }
 
 #[derive(Debug, Clone)]
@@ -464,19 +464,11 @@ impl Parser {
                 };
             }
             TokenKind::Var(val) => {
-                self.advance();
-
                 // handle function call
-                if self.r#match("(") {
-                    self.advance();
-                    let node = ExprNode {
-                        kind: ExprKind::Funcall(val.into()),
-                        loc,
-                        r#type: Type::Int,
-                    };
-                    self.skip(")");
-                    return node;
+                if let TokenKind::Punct(Punct::LeftParen) = self.peek_n(1).kind {
+                    return self.funcall();
                 }
+                self.advance();
 
                 let stack_offset = if self.variables.contains_key(&val) {
                     *self.variables.get(&val).unwrap()
@@ -508,8 +500,37 @@ impl Parser {
         self.error_tok(self.peek(), "Expected expression");
     }
 
+    // funcall = ident "(" (assign ("," assign)*? ")"
+    fn funcall(&mut self) -> ExprNode {
+        if let TokenKind::Var(name) = self.peek().kind.clone() {
+            let loc = self.loc();
+            self.advance();
+
+            let mut args = vec![];
+            self.skip("(");
+            while self.peek().kind != TokenKind::Punct(Punct::RightParen) {
+                if !args.is_empty() {
+                    self.skip(",");
+                }
+                args.push(self.assign());
+            }
+            self.skip(")");
+
+            return ExprNode {
+                kind: ExprKind::Funcall(name.into(), args),
+                loc,
+                r#type: Type::Int,
+            };
+        }
+        self.error_tok(self.peek(), "Expected function");
+    }
+
     fn peek(&self) -> &Token {
         &self.tokens[self.index]
+    }
+
+    fn peek_n(&self, n: usize) -> &Token {
+        &self.tokens[self.index + n]
     }
 
     fn advance(&mut self) {

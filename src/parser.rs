@@ -38,8 +38,11 @@ pub enum ExprKind {
     Eq(P<ExprNode>, P<ExprNode>),
     Ne(P<ExprNode>, P<ExprNode>),
 
-    Assign(Binding, P<ExprNode>),
+    Assign(P<ExprNode>, P<ExprNode>),
     Var(Binding),
+
+    Addr(P<ExprNode>),
+    Deref(P<ExprNode>),
 }
 
 #[derive(Debug, Clone)]
@@ -90,6 +93,42 @@ impl Parser {
         let res = self.compound_stmt();
         self.ensure_done();
         (res, self.stack_size)
+    }
+
+    // compound-stmt = stmt* "}"
+    fn compound_stmt(&mut self) -> StmtNode {
+        let mut stmts = vec![];
+        let loc = self.loc();
+        while self.peek().kind != TokenKind::Punct(Punct::RightBrace) {
+            stmts.push(self.stmt());
+        }
+        self.skip("}");
+        StmtNode {
+            kind: StmtKind::Block(stmts),
+            loc,
+            r#type: Type::Int,
+        }
+    }
+
+    // expr-stmt = expr? ";"
+    fn expr_stmt(&mut self) -> StmtNode {
+        let loc = self.loc();
+        if let TokenKind::Punct(Punct::Semicolon) = self.peek().kind {
+            self.advance();
+            return StmtNode {
+                kind: StmtKind::Block(vec![]),
+                loc,
+                r#type: Type::Int,
+            };
+        }
+
+        let node = self.expr();
+        self.skip(";");
+        StmtNode {
+            kind: StmtKind::Expr(node.clone()),
+            loc: node.loc,
+            r#type: node.r#type,
+        }
     }
 
     // stmt = "return" expr ";
@@ -170,43 +209,7 @@ impl Parser {
         self.expr_stmt()
     }
 
-    // compound-stmt = stmt* "}"
-    fn compound_stmt(&mut self) -> StmtNode {
-        let mut stmts = vec![];
-        let loc = self.loc();
-        while self.peek().kind != TokenKind::Punct(Punct::RightBrace) {
-            stmts.push(self.stmt());
-        }
-        self.skip("}");
-        StmtNode {
-            kind: StmtKind::Block(stmts),
-            loc,
-            r#type: Type::Int,
-        }
-    }
-
-    // expr-stmt = expr? ";"
-    fn expr_stmt(&mut self) -> StmtNode {
-        let loc = self.loc();
-        if let TokenKind::Punct(Punct::Semicolon) = self.peek().kind {
-            self.advance();
-            return StmtNode {
-                kind: StmtKind::Block(vec![]),
-                loc,
-                r#type: Type::Int,
-            };
-        }
-
-        let node = self.expr();
-        self.skip(";");
-        StmtNode {
-            kind: StmtKind::Expr(node.clone()),
-            loc: node.loc,
-            r#type: node.r#type,
-        }
-    }
-
-    // expr = equality
+    // expr = assign
     fn expr(&mut self) -> ExprNode {
         self.assign()
     }
@@ -215,17 +218,10 @@ impl Parser {
     fn assign(&mut self) -> ExprNode {
         let mut node = self.equality();
         if let TokenKind::Punct(Punct::Eq) = self.peek().kind {
-            let loc = self.loc();
+            self.advance();
 
-            // left hand side must be a var
-            if let ExprKind::Var(name) = node.kind {
-                self.advance();
-                node = ExprNode {
-                    kind: ExprKind::Assign(name, P::new(self.assign())),
-                    loc,
-                    r#type: Type::Int,
-                };
-            }
+            // anything can now be in assign. How to pass any exprkind to binding?
+            node.kind = ExprKind::Assign(P::new(node.clone()), P::new(self.assign()));
         }
         node
     }
@@ -320,22 +316,33 @@ impl Parser {
         node
     }
 
-    // unary = ("+" | "-") unary
+    // unary = ("+" | "-" | "*" | "&") unary
     //       | primary
     fn unary(&mut self) -> ExprNode {
         let loc = self.loc();
 
-        if let TokenKind::Punct(punct @ (Punct::Minus | Punct::Plus)) = self.peek().kind {
+        if let TokenKind::Punct(
+            punct @ (Punct::Minus | Punct::Plus | Punct::Ampersand | Punct::Star),
+        ) = self.peek().kind
+        {
             self.advance();
+
             if punct == Punct::Plus {
                 return self.unary();
+            } else {
+                let lhs = P::new(self.unary());
+                return ExprNode {
+                    kind: if punct == Punct::Minus {
+                        ExprKind::Neg(lhs)
+                    } else if punct == Punct::Ampersand {
+                        ExprKind::Addr(lhs)
+                    } else {
+                        ExprKind::Deref(lhs)
+                    },
+                    loc,
+                    r#type: Type::Int,
+                };
             }
-
-            return ExprNode {
-                kind: ExprKind::Neg(P::new(self.unary())),
-                loc,
-                r#type: Type::Int,
-            };
         }
 
         self.primary()
@@ -419,14 +426,14 @@ impl Parser {
     }
 
     fn stack_offset(&mut self) -> i64 {
-        self.stack_offset += 8;
+        self.stack_offset += 1;
         self.stack_size += 8;
         self.align_stack(16);
         -self.stack_offset
     }
 
     fn align_stack(&mut self, align: usize) {
-        self.stack_size = (self.stack_offset as usize + align - 1) / align * align;
+        self.stack_size = ((self.stack_offset * 8) as usize + align - 1) / align * align;
     }
 
     fn loc(&self) -> SourceLocation {

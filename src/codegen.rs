@@ -48,11 +48,16 @@ impl Codegen {
         self.depth -= 1;
     }
 
-    fn addr(&self, node: &Binding) {
+    fn addr(&mut self, node: &ExprNode) {
         match &node.kind {
-            BindingKind::LocalVar { stack_offset } => {
-                println!("  lea {}(%rbp), %rax", stack_offset);
+            ExprKind::Var(Binding {
+                kind: BindingKind::LocalVar { stack_offset },
+                ..
+            }) => {
+                let loc = -(self.stack_size as i64) - ((stack_offset + 1) * 8);
+                println!("  lea {}(%rbp), %rax", loc);
             }
+            ExprKind::Deref(ref lhs) => self.expr(lhs),
             _ => self.error_at(node.loc.offset, "not an lvalue"),
         }
     }
@@ -180,7 +185,7 @@ impl Codegen {
                 println!("  setl %al");
                 println!("  movzb %al, %rax");
             }
-            ExprKind::Var(ref node) => {
+            ExprKind::Var(_) => {
                 self.addr(node);
                 println!("  mov (%rax), %rax");
             }
@@ -190,6 +195,13 @@ impl Codegen {
                 self.expr(rhs);
                 self.pop("%rdi");
                 println!("  mov %rax, (%rdi)");
+            }
+            ExprKind::Addr(ref lhs) => {
+                self.addr(lhs);
+            }
+            ExprKind::Deref(ref lhs) => {
+                self.expr(lhs);
+                println!("  mov (%rax), %rax");
             }
         };
     }

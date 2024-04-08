@@ -150,6 +150,19 @@ impl Parser {
                 r#type: Type::Int,
             };
         }
+        if let TokenKind::Keyword(Keyword::While) = self.peek().kind {
+            let loc = self.loc();
+            self.advance();
+            self.skip("(");
+            let cond = Some(P::new(self.expr()));
+            self.skip(")");
+            let then = P::new(self.stmt());
+            return StmtNode {
+                kind: StmtKind::For(None, cond, None, then),
+                loc,
+                r#type: Type::Int,
+            };
+        }
         if let TokenKind::Punct(Punct::LeftBrace) = self.peek().kind {
             self.advance();
             return self.compound_stmt();

@@ -1,6 +1,13 @@
 use std::collections::HashMap;
 
-use crate::{ErrorReporting, Keyword, Punct, SourceLocation, Token, TokenKind, Type, P};
+use crate::{ErrorReporting, Keyword, Punct, SourceLocation, Token, TokenKind, P};
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum Type {
+    Ptr(P<Type>),
+    Int,
+    Unit,
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Node<Kind> {
@@ -137,6 +144,7 @@ impl Parser {
     //      | "{" compound-stmt
     //      | expr-stmt
     fn stmt(&mut self) -> StmtNode {
+        let r#type = Type::Unit;
         if let TokenKind::Keyword(Keyword::Return) = self.peek().kind {
             self.advance();
             let node = self.expr();
@@ -144,7 +152,7 @@ impl Parser {
             return StmtNode {
                 kind: StmtKind::Return(node.clone()),
                 loc: node.loc,
-                r#type: node.r#type,
+                r#type,
             };
         }
         if let TokenKind::Keyword(Keyword::If) = self.peek().kind {
@@ -162,7 +170,7 @@ impl Parser {
             return StmtNode {
                 kind: StmtKind::If(cond, then, r#else),
                 loc,
-                r#type: Type::Int,
+                r#type,
             };
         }
         if let TokenKind::Keyword(Keyword::For) = self.peek().kind {
@@ -186,7 +194,7 @@ impl Parser {
             return StmtNode {
                 kind: StmtKind::For(init, cond, incr, then),
                 loc,
-                r#type: Type::Int,
+                r#type,
             };
         }
         if let TokenKind::Keyword(Keyword::While) = self.peek().kind {
@@ -199,7 +207,7 @@ impl Parser {
             return StmtNode {
                 kind: StmtKind::For(None, cond, None, then),
                 loc,
-                r#type: Type::Int,
+                r#type,
             };
         }
         if let TokenKind::Punct(Punct::LeftBrace) = self.peek().kind {
@@ -220,7 +228,6 @@ impl Parser {
         if let TokenKind::Punct(Punct::Eq) = self.peek().kind {
             self.advance();
 
-            // anything can now be in assign. How to pass any exprkind to binding?
             node.kind = ExprKind::Assign(P::new(node.clone()), P::new(self.assign()));
         }
         node
@@ -233,11 +240,13 @@ impl Parser {
         while let TokenKind::Punct(punct @ (Punct::EqEq | Punct::Ne)) = self.peek().kind {
             let loc = self.loc();
             self.advance();
+            let lhs = P::new(node);
+            let rhs = P::new(self.relational());
             node = ExprNode {
                 kind: if punct == Punct::EqEq {
-                    ExprKind::Eq(P::new(node), P::new(self.relational()))
+                    ExprKind::Eq(lhs, rhs)
                 } else {
-                    ExprKind::Ne(P::new(node), P::new(self.relational()))
+                    ExprKind::Ne(lhs, rhs)
                 },
                 loc,
                 r#type: Type::Int,
@@ -279,16 +288,13 @@ impl Parser {
         let mut node = self.mul();
 
         while let TokenKind::Punct(punct @ (Punct::Plus | Punct::Minus)) = self.peek().kind {
-            let loc = self.loc();
             self.advance();
-            node = ExprNode {
-                kind: if punct == Punct::Plus {
-                    ExprKind::Add(P::new(node), P::new(self.mul()))
-                } else {
-                    ExprKind::Sub(P::new(node), P::new(self.mul()))
-                },
-                loc,
-                r#type: Type::Int,
+            let lhs = P::new(node);
+            let rhs = P::new(self.mul());
+            if punct == Punct::Plus {
+                node = self.add_overload(lhs, rhs);
+            } else {
+                node = self.sub_overload(lhs, rhs);
             }
         }
 
@@ -302,11 +308,13 @@ impl Parser {
 
         while let TokenKind::Punct(punct @ (Punct::Star | Punct::Slash)) = self.peek().kind {
             self.advance();
+            let lhs = P::new(node);
+            let rhs = P::new(self.unary());
             node = ExprNode {
                 kind: if punct == Punct::Star {
-                    ExprKind::Mul(P::new(node), P::new(self.unary()))
+                    ExprKind::Mul(lhs, rhs)
                 } else {
-                    ExprKind::Div(P::new(node), P::new(self.unary()))
+                    ExprKind::Div(lhs, rhs)
                 },
                 loc,
                 r#type: Type::Int,
@@ -331,6 +339,18 @@ impl Parser {
                 return self.unary();
             } else {
                 let lhs = P::new(self.unary());
+                let r#type = if punct == Punct::Ampersand {
+                    Type::Ptr(P::new(lhs.r#type.clone()))
+                } else if punct == Punct::Star {
+                    if let Type::Ptr(ref base) = lhs.r#type {
+                        *base.clone()
+                    } else {
+                        Type::Int
+                    }
+                } else {
+                    Type::Int
+                };
+
                 return ExprNode {
                     kind: if punct == Punct::Minus {
                         ExprKind::Neg(lhs)
@@ -340,7 +360,7 @@ impl Parser {
                         ExprKind::Deref(lhs)
                     },
                     loc,
-                    r#type: Type::Int,
+                    r#type,
                 };
             }
         }
@@ -439,4 +459,90 @@ impl Parser {
     fn loc(&self) -> SourceLocation {
         self.peek().loc
     }
+
+    fn add_overload(&self, lhs: P<ExprNode>, rhs: P<ExprNode>) -> ExprNode {
+        let loc = self.loc();
+        let mut lhs = lhs;
+        let mut rhs = rhs;
+
+        if let Type::Int = lhs.r#type {
+            if let Type::Ptr(_) = rhs.r#type {
+                std::mem::swap(&mut lhs, &mut rhs);
+            }
+        }
+
+        match (&lhs.r#type, &rhs.r#type) {
+            (Type::Int, Type::Int) => ExprNode {
+                kind: ExprKind::Add(lhs, rhs),
+                loc,
+                r#type: Type::Int,
+            },
+            (Type::Ptr(_), Type::Int) => {
+                let rhs = P::new(ExprNode {
+                    kind: ExprKind::Mul(
+                        P::new(ExprNode {
+                            kind: ExprKind::Number(8),
+                            loc,
+                            r#type: Type::Int,
+                        }),
+                        rhs,
+                    ),
+                    loc,
+                    r#type: Type::Int,
+                });
+                let r#type = lhs.r#type.clone();
+                ExprNode {
+                    kind: ExprKind::Add(lhs, rhs),
+                    loc,
+                    r#type,
+                }
+            }
+            _ => self.error_at(loc.offset, "invalid operands"),
+        }
+    }
+
+    fn sub_overload(&self, lhs: P<ExprNode>, rhs: P<ExprNode>) -> ExprNode {
+        let loc = self.loc();
+        match (&lhs.r#type, &rhs.r#type) {
+            (Type::Int, Type::Int) => ExprNode {
+                kind: ExprKind::Sub(lhs, rhs),
+                loc,
+                r#type: Type::Int,
+            },
+            (Type::Ptr(_), Type::Int) => {
+                let rhs = P::new(ExprNode {
+                    kind: ExprKind::Mul(synth_num(8, loc), rhs),
+                    loc,
+                    r#type: Type::Int,
+                });
+                let r#type = lhs.r#type.clone();
+                ExprNode {
+                    kind: ExprKind::Sub(lhs, rhs),
+                    loc,
+                    r#type,
+                }
+            }
+            (Type::Ptr(_), Type::Ptr(_)) => {
+                let node = P::new(ExprNode {
+                    kind: ExprKind::Sub(lhs, rhs),
+                    loc,
+                    r#type: Type::Int,
+                });
+                ExprNode {
+                    kind: ExprKind::Div(node, synth_num(8, loc)),
+                    loc,
+                    r#type: Type::Int,
+                }
+            }
+            _ => self.error_at(loc.offset, "invalid operands"),
+        }
+    }
+}
+
+fn synth_num(v: i64, loc: SourceLocation) -> P<ExprNode> {
+    P::new(ExprNode {
+        kind: ExprKind::Number(v),
+        loc,
+        r#type: Type::Int,
+    })
 }

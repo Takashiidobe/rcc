@@ -50,7 +50,7 @@ pub enum Lifetime {
 
 #[cfg_attr(test, derive(Serialize, Deserialize))]
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub enum Type {
+pub enum TokenType {
     Char,
     Double,
     Float,
@@ -94,7 +94,7 @@ pub enum Punct {
 #[derive(Debug, Clone, PartialEq)]
 pub enum TokenKind {
     Keyword(Keyword),
-    Type(Type),
+    Type(TokenType),
     Punct(Punct),
     Lifetime(Lifetime),
     Macro(Macro),
@@ -269,49 +269,49 @@ impl Tokenizer {
         // Types
         if self.match_n("void") {
             return Token {
-                kind: TokenKind::Type(Type::Void),
+                kind: TokenKind::Type(TokenType::Void),
                 loc: self.location(start),
                 length: self.index - start,
             };
         }
         if self.match_n("int") {
             return Token {
-                kind: TokenKind::Type(Type::Int),
+                kind: TokenKind::Type(TokenType::Int),
                 loc: self.location(start),
                 length: self.index - start,
             };
         }
         if self.match_n("char") {
             return Token {
-                kind: TokenKind::Type(Type::Char),
+                kind: TokenKind::Type(TokenType::Char),
                 loc: self.location(start),
                 length: self.index - start,
             };
         }
         if self.match_n("long") {
             return Token {
-                kind: TokenKind::Type(Type::Long),
+                kind: TokenKind::Type(TokenType::Long),
                 loc: self.location(start),
                 length: self.index - start,
             };
         }
         if self.match_n("float") {
             return Token {
-                kind: TokenKind::Type(Type::Float),
+                kind: TokenKind::Type(TokenType::Float),
                 loc: self.location(start),
                 length: self.index - start,
             };
         }
         if self.match_n("double") {
             return Token {
-                kind: TokenKind::Type(Type::Double),
+                kind: TokenKind::Type(TokenType::Double),
                 loc: self.location(start),
                 length: self.index - start,
             };
         }
         if self.match_n("unsigned") {
             return Token {
-                kind: TokenKind::Type(Type::Unsigned),
+                kind: TokenKind::Type(TokenType::Unsigned),
                 loc: self.location(start),
                 length: self.index - start,
             };

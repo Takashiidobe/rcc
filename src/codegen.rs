@@ -2,7 +2,7 @@ use crate::{Binding, BindingKind, ErrorReporting, ExprKind, ExprNode, StmtKind, 
 
 pub struct Codegen {
     pub source: Vec<u8>,
-    pub node: StmtNode,
+    pub nodes: Vec<StmtNode>,
     pub depth: i64,
     pub stack_size: usize,
     pub count: usize,
@@ -15,10 +15,10 @@ impl ErrorReporting for Codegen {
 }
 
 impl Codegen {
-    pub fn new(source: Vec<u8>, node: StmtNode, stack_size: usize) -> Self {
+    pub fn new(source: Vec<u8>, nodes: Vec<StmtNode>, stack_size: usize) -> Self {
         Self {
             source,
-            node,
+            nodes,
             stack_size,
             count: 0,
             depth: 0,
@@ -31,7 +31,9 @@ impl Codegen {
         println!("  push %rbp");
         println!("  mov %rsp, %rbp");
         println!("  sub ${}, %rsp", self.stack_size);
-        self.stmt(&self.node.clone());
+        for stmt in self.nodes.clone() {
+            self.stmt(&stmt);
+        }
         println!(".L.return:");
         println!("  mov %rbp, %rsp");
         println!("  pop %rbp");

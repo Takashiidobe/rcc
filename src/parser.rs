@@ -95,25 +95,105 @@ impl Parser {
     }
 
     // parse = stmt*
-    pub fn parse(&mut self) -> (StmtNode, usize) {
+    pub fn parse(&mut self) -> (Vec<StmtNode>, usize) {
         self.skip("{");
-        let res = self.compound_stmt();
+        let stmts = vec![self.compound_stmt()];
         self.ensure_done();
-        (res, self.stack_size)
+        (stmts, self.stack_size)
     }
 
-    // compound-stmt = stmt* "}"
+    // compound_stmt = "{" (declaration | stmt)* "}
     fn compound_stmt(&mut self) -> StmtNode {
         let mut stmts = vec![];
         let loc = self.loc();
         while self.peek().kind != TokenKind::Punct(Punct::RightBrace) {
-            stmts.push(self.stmt());
+            if self.r#match("int") {
+                self.declaration(&mut stmts);
+            } else {
+                stmts.push(self.stmt());
+            }
         }
         self.skip("}");
         StmtNode {
             kind: StmtKind::Block(stmts),
             loc,
             r#type: Type::Int,
+        }
+    }
+
+    // declaration = declspec (declarator ("=" expr)? ("," declarator ("=" expr)?)*)? ";"
+    fn declaration(&mut self, stmts: &mut Vec<StmtNode>) {
+        let base_type = self.declspec();
+
+        let mut count = 0;
+        while self.peek().kind != TokenKind::Punct(Punct::Semicolon) {
+            if count > 0 {
+                self.skip(",");
+            }
+            count += 1;
+
+            let loc = self.loc();
+            let (r#type, val) = self.declarator(&base_type);
+
+            let stack_offset = if self.variables.contains_key(&val) {
+                *self.variables.get(&val).unwrap()
+            } else {
+                let stack_offset = self.stack_offset();
+                self.variables.insert(val.clone(), stack_offset);
+                stack_offset
+            };
+            let var_data = Binding {
+                kind: BindingKind::LocalVar { stack_offset },
+                name: val.bytes().collect(),
+                r#type: Type::Int,
+                loc,
+            };
+
+            if self.peek().kind != TokenKind::Punct(Punct::Eq) {
+                continue;
+            }
+
+            self.advance();
+            let lhs = ExprNode {
+                kind: ExprKind::Var(var_data),
+                loc,
+                r#type,
+            };
+            let rhs = self.assign();
+            let rhs_type = rhs.r#type.clone();
+
+            stmts.push(StmtNode {
+                kind: StmtKind::Expr(ExprNode {
+                    kind: ExprKind::Assign(P::new(lhs), P::new(rhs)),
+                    loc,
+                    r#type: rhs_type,
+                }),
+                loc,
+                r#type: Type::Unit,
+            });
+        }
+    }
+
+    // declspec = "int"
+    fn declspec(&mut self) -> Type {
+        self.skip("int");
+        Type::Int
+    }
+
+    // declarator = "*"* ident
+    fn declarator(&mut self, base_type: &Type) -> (Type, String) {
+        let mut r#type = base_type.clone();
+        while let TokenKind::Punct(Punct::Star) = self.peek().kind {
+            self.advance();
+            r#type = Type::Ptr(P::new(r#type));
+        }
+
+        match self.peek().kind.clone() {
+            TokenKind::Var(name) => {
+                self.advance();
+                (r#type, name)
+            }
+            _ => self.error_tok(self.peek(), "expected a variable name"),
         }
     }
 
